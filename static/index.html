@@ -26,7 +26,7 @@
   h1 { font-size: 21px; margin-bottom: 2px; }
   .sub { color: #7b8798; font-size: 13px; margin-bottom: 20px; }
 
-  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 18px; }
+  .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 18px; }
   .stat { background: #fff; border-radius: 14px; padding: 16px 20px; box-shadow: 0 1px 2px rgba(16,24,40,.06); }
   .stat .num { font-size: 26px; font-weight: 600; }
   .stat .lbl { font-size: 12px; color: #7b8798; margin-top: 2px; }
@@ -53,6 +53,8 @@
   .btn.mini { padding: 4px 10px; font-size: 12px; background: #f2f4f7; color: #667085; border-radius: 7px; border: none; cursor: pointer; }
   .btn.mini:hover { background: #e6e9ee; }
   .btn.danger-mini { background: #fdf0f0; color: #d64545; }
+  .cost-in { width: 84px; padding: 6px 9px; border: 1px solid #d5dae2; border-radius: 7px; font-size: 13px; }
+  .cost-in:focus { outline: none; border-color: #e97b24; }
 
   /* 表格 */
   table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
@@ -80,7 +82,7 @@
 </head>
 <body>
 <aside>
-  <div class="brand"><b>仓库管家</b><span>电商库存系统 v2 · SQLite</span></div>
+  <div class="brand"><b>仓库管家</b><span>电商库存系统 v3 · SQLite</span></div>
   <nav>
     <a data-page="stock" class="on">库存总览 <span class="dot" id="nStock">0</span></a>
     <a data-page="in">入库</a>
@@ -99,6 +101,7 @@
   <div class="stats">
     <div class="stat accent"><div class="num" id="stSku">0</div><div class="lbl">SKU 数</div></div>
     <div class="stat"><div class="num" id="stQty">0</div><div class="lbl">总库存（件）</div></div>
+    <div class="stat accent"><div class="num" id="stValue" style="font-size:20px">$ 0.00</div><div class="lbl">库存款（成本货值）</div></div>
     <div class="stat danger"><div class="num" id="stLow">0</div><div class="lbl">低库存预警</div></div>
     <div class="stat"><div class="num" id="stToday">0</div><div class="lbl">今日单据</div></div>
   </div>
@@ -110,7 +113,7 @@
         <div class="spacer"></div>
         <a class="btn ghost" href="/api/export/stock.csv" download>导出库存 CSV</a>
       </div>
-      <table><thead><tr><th>SKU</th><th>品名</th><th>库位</th><th>当前库存</th><th>安全库存</th><th>状态</th></tr></thead>
+      <table><thead><tr><th>SKU</th><th>品名</th><th>库位</th><th>当前库存</th><th>安全库存</th><th>货值</th><th>状态</th></tr></thead>
       <tbody id="stockBody"></tbody></table>
       <div class="empty" id="stockEmpty">还没有商品 —— 去「商品档案」添加第一个 SKU</div>
     </div>
@@ -152,11 +155,25 @@
         <div class="field"><label>库位</label><input id="gLoc" type="text" style="width:110px"></div>
         <div class="field"><label>单位</label><input id="gUnit" type="text" value="件" style="width:70px"></div>
         <div class="field"><label>安全库存</label><input id="gSafe" type="number" min="0" value="10" style="width:90px"></div>
+        <div class="field"><label>成本 ($)</label><input id="gCost" type="number" min="0" step="0.01" value="0" style="width:90px"></div>
         <button class="btn primary" onclick="addGoods()">添加</button>
       </div>
-      <table><thead><tr><th>SKU</th><th>品名</th><th>库位</th><th>单位</th><th>安全库存</th><th>当前库存</th><th>操作</th></tr></thead>
+      <table><thead><tr><th>SKU</th><th>品名</th><th>库位</th><th>单位</th><th>安全库存</th><th>成本 ($)</th><th>当前库存</th><th>操作</th></tr></thead>
       <tbody id="goodsBody"></tbody></table>
       <div class="empty" id="goodsEmpty">还没有商品</div>
+    </div>
+
+    <div class="card">
+      <h2>Excel / CSV 批量导入</h2>
+      <div class="toolbar">
+        <label class="btn primary" style="cursor:pointer;display:inline-block">选择文件导入<input type="file" id="excelFile" accept=".xlsx,.csv" style="display:none"></label>
+        <a class="btn ghost" href="/api/import-template.csv" download="导入模板.csv">下载模板</a>
+      </div>
+      <div class="sub" style="margin-top:12px">
+        支持 <b>.xlsx / .csv</b>。表格要有 <b>SKU</b> 列，其他列可带可不带：<b>品名 / 库位 / 单位 / 安全库存 / 成本</b>（列名写得差不多就能认出来）。
+        已存在的 SKU 只更新信息，<b>不会动你已录入的库存</b>。
+      </div>
+      <div class="sub" id="importResult" style="margin-top:8px"></div>
     </div>
   </div>
 
@@ -234,6 +251,7 @@ $('flowFilter').onchange = loadFlow;
 async function loadStats() {
   var s = await api('/api/stats');
   $('stSku').textContent = s.sku_count; $('stQty').textContent = s.total_qty;
+  $('stValue').textContent = '$ ' + (s.value || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
   $('stLow').textContent = s.low; $('stToday').textContent = s.today;
   $('nStock').textContent = s.sku_count; $('nGoods').textContent = s.sku_count;
 }
@@ -261,6 +279,7 @@ function renderStock() {
     if (low) tr.className = 'low';
     tr.innerHTML = '<td><b>' + esc(g.sku) + '</b></td><td>' + esc(g.name) + '</td><td>' + esc(g.loc || '—') +
       '</td><td class="num">' + g.stock + ' ' + esc(g.unit) + '</td><td>' + g.safe +
+      '</td><td class="num" style="color:#667085">' + (g.cost ? '$' + (g.stock * g.cost).toFixed(2) : '—') +
       '</td><td><span class="pill ' + (low ? 'bad">⚠ 需补货' : 'ok">正常') + '</span></td>';
     tb.appendChild(tr);
   });
@@ -272,7 +291,9 @@ function renderGoods() {
   goods.forEach(function(g) {
     var tr = document.createElement('tr');
     tr.innerHTML = '<td><b>' + esc(g.sku) + '</b></td><td>' + esc(g.name) + '</td><td>' + esc(g.loc || '—') +
-      '</td><td>' + esc(g.unit) + '</td><td>' + g.safe + '</td><td class="num">' + g.stock +
+      '</td><td>' + esc(g.unit) + '</td><td>' + g.safe +
+      '</td><td><input class="cost-in" type="number" min="0" step="0.01" value="' + (g.cost || 0) +
+      '" onchange="updateCost(\'' + esc(g.sku) + '\', this)"></td><td class="num">' + g.stock +
       '</td><td><button class="btn mini danger-mini" onclick="delGoods(\'' + esc(g.sku) + '\')">删除</button></td>';
     tb.appendChild(tr);
   });
@@ -314,12 +335,38 @@ async function addGoods() {
   try {
     await api('/api/goods', { method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ sku: $('gSku').value, name: $('gName').value, loc: $('gLoc').value,
-        unit: $('gUnit').value, safe: parseInt($('gSafe').value,10) || 0 }) });
+        unit: $('gUnit').value, safe: parseInt($('gSafe').value,10) || 0, cost: parseFloat($('gCost').value) || 0 }) });
     toast('商品已添加 ✓');
-    $('gSku').value = ''; $('gName').value = ''; $('gLoc').value = '';
+    $('gSku').value = ''; $('gName').value = ''; $('gLoc').value = ''; $('gCost').value = 0;
     await refresh();
   } catch (e) { toast(e.message, true); }
 }
+async function updateCost(sku, input) {
+  var v = parseFloat(input.value) || 0;
+  try {
+    await api('/api/goods/' + encodeURIComponent(sku), { method: 'PATCH', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ field: 'cost', value: v }) });
+    toast('成本已更新 ✓'); await loadStats();
+  } catch (e) { toast(e.message, true); await loadGoods(); }
+}
+$('excelFile').onchange = function() {
+  var f = this.files[0]; if (!f) return;
+  var fd = new FormData(); fd.append('file', f);
+  $('importResult').textContent = '导入中…';
+  fetch('/api/import', { method: 'POST', body: fd })
+    .then(function(r) { return r.json(); })
+    .then(async function(d) {
+      if (d.error) { $('importResult').textContent = '❌ ' + d.error; toast('导入失败：' + d.error, true); return; }
+      var msg = '✅ 导入完成：新增 ' + d.added + ' 个，更新 ' + d.updated + ' 个' +
+        (d.skipped ? '，跳过 ' + d.skipped + ' 个' : '');
+      $('importResult').textContent = msg;
+      if (d.errors && d.errors.length) $('importResult').textContent += '（出错：' + d.errors.join('；') + '）';
+      toast(msg);
+      await refresh();
+    })
+    .catch(function(e) { $('importResult').textContent = '❌ 导入失败：' + e; });
+  this.value = '';
+};
 async function delGoods(sku) {
   if (!confirm('删除商品 ' + sku + '？流水保留，库存总览不再显示。')) return;
   try { await api('/api/goods/' + encodeURIComponent(sku), { method: 'DELETE' }); toast('已删除'); await refresh(); }
