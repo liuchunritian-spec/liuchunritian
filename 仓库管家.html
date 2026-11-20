@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>仓库管家 · 电商库存系统</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: #f4f5f7; color: #1f2329; padding: 20px; }
+  .wrap { max-width: 960px; margin: 0 auto; }
+  h1 { font-size: 20px; margin-bottom: 2px; }
+  .sub { color: #6b7280; font-size: 13px; margin-bottom: 16px; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+  .tabs button { padding: 8px 16px; border: none; border-radius: 8px 8px 0 0; background: #e5e7eb; color: #374151; font-size: 13px; cursor: pointer; }
+  .tabs button.on { background: #e97b24; color: #fff; }
+  .card { background: #fff; border-radius: 12px; padding: 18px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .grid { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 12px; color: #6b7280; }
+  .field input, .field select { padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; width: 130px; }
+  .field input.wide { width: 200px; }
+  button.primary { padding: 9px 18px; border: none; border-radius: 8px; background: #e97b24; color: #fff; font-size: 14px; cursor: pointer; }
+  button.ghost { padding: 8px 14px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; color: #374151; font-size: 13px; cursor: pointer; }
+  button.mini { padding: 4px 10px; border: none; border-radius: 6px; background: #f1f2f4; color: #6b7280; font-size: 12px; cursor: pointer; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; color: #6b7280; font-weight: 400; padding: 8px 10px; border-bottom: 1px solid #e5e7eb; }
+  td { padding: 8px 10px; border-bottom: 1px solid #f1f2f4; }
+  tr.low td { background: #fcebeb; }
+  tr.low td.qty { color: #a32d2d; font-weight: 600; }
+  td.qty { font-weight: 500; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
+  .tag.in { background: #eaf3de; color: #3b6d11; }
+  .tag.out { background: #fcebeb; color: #a32d2d; }
+  .stat { display: flex; gap: 14px; margin-bottom: 14px; flex-wrap: wrap; }
+  .stat > div { background: #fff; border-radius: 12px; padding: 14px 20px; box-shadow: 0 1px 3px rgba(0,0,0,.08); min-width: 140px; }
+  .stat .num { font-size: 24px; font-weight: 600; color: #e97b24; }
+  .stat .lbl { font-size: 12px; color: #6b7280; margin-top: 2px; }
+  .empty { text-align: center; color: #9ca3af; font-size: 13px; padding: 30px 0; }
+  input.search { padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 13px; width: 220px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>仓库管家</h1>
+  <div class="sub">电商库存 v1 —— 数据保存在本机浏览器，请定期用「数据」页导出备份</div>
+
+  <div class="stat">
+    <div><div class="num" id="stSku">0</div><div class="lbl">SKU 数</div></div>
+    <div><div class="num" id="stQty">0</div><div class="lbl">总库存（件）</div></div>
+    <div><div class="num" id="stLow" style="color:#a32d2d">0</div><div class="lbl">低库存预警</div></div>
+    <div><div class="num" id="stToday">0</div><div class="lbl">今日单据</div></div>
+  </div>
+
+  <div class="tabs">
+    <button data-tab="stock" class="on">库存总览</button>
+    <button data-tab="in">入库</button>
+    <button data-tab="out">出库</button>
+    <button data-tab="goods">商品档案</button>
+    <button data-tab="flow">流水记录</button>
+    <button data-tab="data">数据</button>
+  </div>
+
+  <div id="tab-stock" class="page">
+    <div class="card">
+      <div class="grid" style="margin-bottom:12px">
+        <input class="search" id="q" placeholder="搜索 SKU / 品名 / 库位">
+        <button class="ghost" onclick="exportStockCSV()">导出库存 CSV</button>
+      </div>
+      <table><thead><tr><th>SKU</th><th>品名</th><th>库位</th><th>当前库存</th><th>安全库存</th><th>状态</th></tr></thead>
+      <tbody id="stockBody"></tbody></table>
+      <div class="empty" id="stockEmpty">还没有商品，先去「商品档案」添加</div>
+    </div>
+  </div>
+
+  <div id="tab-in" class="page" style="display:none">
+    <div class="card">
+      <div class="grid">
+        <div class="field"><label>SKU</label><select id="inSku" class="wide"></select></div>
+        <div class="field"><label>数量</label><input id="inQty" type="number" min="1" value="1"></div>
+        <div class="field"><label>备注（货柜/快递单号等）</label><input id="inNote" class="wide" type="text"></div>
+        <button class="primary" onclick="addRecord('in')">确认入库</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-out" class="page" style="display:none">
+    <div class="card">
+      <div class="grid">
+        <div class="field"><label>SKU</label><select id="outSku" class="wide"></select></div>
+        <div class="field"><label>数量</label><input id="outQty" type="number" min="1" value="1"></div>
+        <div class="field"><label>备注（订单号/渠道）</label><input id="outNote" class="wide" type="text"></div>
+        <button class="primary" onclick="addRecord('out')">确认出库</button>
+      </div>
+      <div class="sub" style="margin-top:10px">出库数量超过当前库存会被拦截，防止错单。</div>
+    </div>
+  </div>
+
+  <div id="tab-goods" class="page" style="display:none">
+    <div class="card">
+      <div class="grid" style="margin-bottom:12px">
+        <div class="field"><label>SKU（唯一）</label><input id="gSku" type="text" class="wide"></div>
+        <div class="field"><label>品名</label><input id="gName" type="text" class="wide"></div>
+        <div class="field"><label>库位</label><input id="gLoc" type="text"></div>
+        <div class="field"><label>单位</label><input id="gUnit" type="text" value="件"></div>
+        <div class="field"><label>安全库存</label><input id="gSafe" type="number" min="0" value="10"></div>
+        <button class="primary" onclick="addGoods()">添加商品</button>
+      </div>
+      <table><thead><tr><th>SKU</th><th>品名</th><th>库位</th><th>单位</th><th>安全库存</th><th>操作</th></tr></thead>
+      <tbody id="goodsBody"></tbody></table>
+      <div class="empty" id="goodsEmpty">还没有商品</div>
+    </div>
+  </div>
+
+  <div id="tab-flow" class="page" style="display:none">
+    <div class="card">
+      <div class="grid" style="margin-bottom:12px">
+        <select id="flowFilter" style="padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px"><option value="">全部记录</option></select>
+        <button class="ghost" onclick="exportFlowCSV()">导出流水 CSV</button>
+      </div>
+      <table><thead><tr><th>时间</th><th>类型</th><th>SKU</th><th>品名</th><th>数量</th><th>备注</th><th>操作</th></tr></thead>
+      <tbody id="flowBody"></tbody></table>
+      <div class="empty" id="flowEmpty">暂无记录</div>
+    </div>
+  </div>
+
+  <div id="tab-data" class="page" style="display:none">
+    <div class="card">
+      <div class="grid">
+        <button class="primary" onclick="exportAll()">导出备份（JSON）</button>
+        <label class="ghost" style="cursor:pointer;display:inline-block">导入备份<input type="file" id="importFile" accept=".json" style="display:none"></label>
+        <button class="ghost" onclick="clearAll()" style="color:#a32d2d">清空全部数据</button>
+      </div>
+      <div class="sub" style="margin-top:12px">备份包含商品档案和全部流水，换电脑或换浏览器时导入即可无缝接管。</div>
+    </div>
+  </div>
+</div>
+
+<script>
+var $ = function(id) { return document.getElementById(id); };
+var goods = JSON.parse(localStorage.getItem('wk_goods') || '[]');
+var records = JSON.parse(localStorage.getItem('wk_records') || '[]');
+var seq = parseInt(localStorage.getItem('wk_seq') || '1', 10);
+
+function save() {
+  localStorage.setItem('wk_goods', JSON.stringify(goods));
+  localStorage.setItem('wk_records', JSON.stringify(records));
+  localStorage.setItem('wk_seq', String(seq));
+}
+function stockOf(sku) {
+  var n = 0;
+  records.forEach(function(r) { if (r.sku === sku) n += (r.type === 'in' ? r.qty : -r.qty); });
+  return n;
+}
+function goodsOf(sku) {
+  for (var i = 0; i < goods.length; i++) if (goods[i].sku === sku) return goods[i];
+  return null;
+}
+function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+document.querySelectorAll('.tabs button').forEach(function(b) {
+  b.onclick = function() {
+    document.querySelectorAll('.tabs button').forEach(function(x) { x.classList.remove('on'); });
+    b.classList.add('on');
+    document.querySelectorAll('.page').forEach(function(p) { p.style.display = 'none'; });
+    $('tab-' + b.dataset.tab).style.display = 'block';
+  };
+});
+
+$('q').oninput = renderStock;
+$('flowFilter').onchange = renderFlow;
+
+function renderStats() {
+  var total = 0, low = 0;
+  goods.forEach(function(g) { var s = stockOf(g.sku); total += s; if (s <= g.safe) low++; });
+  var today = new Date().toDateString();
+  var td = records.filter(function(r) { return new Date(r.ts).toDateString() === today; }).length;
+  $('stSku').textContent = goods.length;
+  $('stQty').textContent = total;
+  $('stLow').textContent = low;
+  $('stToday').textContent = td;
+}
+
+function renderStock() {
+  var kw = $('q').value.trim().toLowerCase();
+  var tb = $('stockBody'); tb.innerHTML = '';
+  var list = goods.filter(function(g) {
+    return !kw || (g.sku + ' ' + g.name + ' ' + g.loc).toLowerCase().indexOf(kw) >= 0;
+  });
+  list.forEach(function(g) {
+    var s = stockOf(g.sku), isLow = s <= g.safe;
+    var tr = document.createElement('tr');
+    if (isLow) tr.className = 'low';
+    tr.innerHTML = '<td>' + esc(g.sku) + '</td><td>' + esc(g.name) + '</td><td>' + esc(g.loc) +
+      '</td><td class="qty">' + s + ' ' + esc(g.unit) + '</td><td>' + g.safe +
+      '</td><td>' + (isLow ? '⚠️ 需补货' : '正常') + '</td>';
+    tb.appendChild(tr);
+  });
+  $('stockEmpty').style.display = list.length ? 'none' : 'block';
+}
+
+function renderGoods() {
+  var tb = $('goodsBody'); tb.innerHTML = '';
+  goods.forEach(function(g) {
+    var tr = document.createElement('tr');
+    tr.innerHTML = '<td>' + esc(g.sku) + '</td><td>' + esc(g.name) + '</td><td>' + esc(g.loc) + '</td><td>' +
+      esc(g.unit) + '</td><td>' + g.safe +
+      '</td><td><button class="mini" onclick="delGoods(\'' + esc(g.sku) + '\')">删除</button></td>';
+    tb.appendChild(tr);
+  });
+  $('goodsEmpty').style.display = goods.length ? 'none' : 'block';
+}
+
+function renderFlow() {
+  var tb = $('flowBody'); tb.innerHTML = '';
+  var f = $('flowFilter').value;
+  var list = records.filter(function(r) { return !f || r.sku === f; }).slice().reverse();
+  list.forEach(function(r) {
+    var g = goodsOf(r.sku);
+    var tr = document.createElement('tr');
+    var d = new Date(r.ts);
+    tr.innerHTML = '<td>' + d.toLocaleString('zh-CN', {hour12: false}) + '</td>' +
+      '<td><span class="tag ' + r.type + '">' + (r.type === 'in' ? '入库' : '出库') + '</span></td>' +
+      '<td>' + esc(r.sku) + '</td><td>' + esc(g ? g.name : '(已删)') + '</td>' +
+      '<td class="qty">' + r.qty + '</td><td>' + esc(r.note) +
+      '</td><td><button class="mini" onclick="delRecord(' + r.id + ')">撤销</button></td>';
+    tb.appendChild(tr);
+  });
+  $('flowEmpty').style.display = list.length ? 'none' : 'block';
+}
+
+function addRecord(type) {
+  var sku = $(type + 'Sku').value;
+  var qty = parseInt($(type + 'Qty').value, 10);
+  var note = $(type + 'Note').value.trim();
+  if (!sku) { alert('请先在「商品档案」里添加商品'); return; }
+  if (!qty || qty <= 0) { alert('数量要大于 0'); return; }
+  if (type === 'out' && qty > stockOf(sku)) { alert('出库数量超过当前库存（现有 ' + stockOf(sku) + '），已拦截'); return; }
+  records.push({ id: seq++, type: type, sku: sku, qty: qty, note: note, ts: Date.now() });
+  save(); $(type + 'Qty').value = 1; $(type + 'Note').value = '';
+  renderAll();
+}
+
+function delRecord(id) {
+  if (!confirm('撤销这笔单据？（库存会随之回退）')) return;
+  records = records.filter(function(r) { return r.id !== id; });
+  save(); renderAll();
+}
+
+function addGoods() {
+  var sku = $('gSku').value.trim();
+  var name = $('gName').value.trim();
+  if (!sku || !name) { alert('SKU 和品名都要填'); return; }
+  if (goodsOf(sku)) { alert('这个 SKU 已经存在了'); return; }
+  goods.push({ sku: sku, name: name, loc: $('gLoc').value.trim(), unit: $('gUnit').value.trim() || '件', safe: parseInt($('gSafe').value, 10) || 0 });
+  save(); $('gSku').value = ''; $('gName').value = ''; $('gLoc').value = '';
+  renderAll();
+}
+
+function delGoods(sku) {
+  if (!confirm('删除商品 ' + sku + '？流水记录会保留，但库存总览不再显示。')) return;
+  goods = goods.filter(function(g) { return g.sku !== sku; });
+  save(); renderAll();
+}
+
+function fillSelects() {
+  ['inSku', 'outSku', 'flowFilter'].forEach(function(id) {
+    var keep = $(id).value;
+    $(id).innerHTML = (id === 'flowFilter' ? '<option value="">全部记录</option>' : '') +
+      goods.map(function(g) { return '<option value="' + esc(g.sku) + '">' + esc(g.sku) + ' · ' + esc(g.name) + '</option>'; }).join('');
+    $(id).value = keep;
+  });
+}
+
+function csv(rows) {
+  return '\ufeff' + rows.map(function(r) {
+    return r.map(function(c) { return '"' + String(c == null ? '' : c).replace(/"/g, '""') + '"'; }).join(',');
+  }).join('\r\n');
+}
+function download(name, content, mime) {
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content], { type: mime || 'text/csv' }));
+  a.download = name; a.click();
+}
+function exportStockCSV() {
+  var rows = [['SKU','品名','库位','单位','当前库存','安全库存']];
+  goods.forEach(function(g) { rows.push([g.sku, g.name, g.loc, g.unit, stockOf(g.sku), g.safe]); });
+  download('库存总览_' + new Date().toISOString().slice(0,10) + '.csv', csv(rows));
+}
+function exportFlowCSV() {
+  var rows = [['时间','类型','SKU','品名','数量','备注']];
+  records.forEach(function(r) {
+    var g = goodsOf(r.sku);
+    rows.push([new Date(r.ts).toLocaleString('zh-CN', {hour12:false}), r.type === 'in' ? '入库' : '出库', r.sku, g ? g.name : '', r.qty, r.note]);
+  });
+  download('流水记录_' + new Date().toISOString().slice(0,10) + '.csv', csv(rows));
+}
+function exportAll() { download('仓库管家备份_' + new Date().toISOString().slice(0,10) + '.json', JSON.stringify({goods: goods, records: records, seq: seq}), 'application/json'); }
+$('importFile').onchange = function() {
+  var f = this.files[0]; if (!f) return;
+  var reader = new FileReader();
+  reader.onload = function() {
+    try {
+      var d = JSON.parse(reader.result);
+      if (!d.goods || !d.records) throw new Error('格式不对');
+      goods = d.goods; records = d.records; seq = d.seq || (records.length + 1);
+      save(); renderAll(); alert('导入成功：' + goods.length + ' 个 SKU，' + records.length + ' 条流水');
+    } catch (e) { alert('导入失败：' + e.message); }
+  };
+  reader.readAsText(f);
+};
+function clearAll() {
+  if (confirm('确定清空全部数据？此操作不可恢复，建议先导出备份。') && confirm('最后确认一次：真的清空？')) {
+    goods = []; records = []; seq = 1; save(); renderAll();
+  }
+}
+
+function renderAll() { fillSelects(); renderStats(); renderStock(); renderGoods(); renderFlow(); }
+renderAll();
+</script>
+</body>
+</html>
