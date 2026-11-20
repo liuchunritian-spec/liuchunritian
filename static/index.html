@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>仓库管家 · 电商库存系统</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: #f2f4f7; color: #1f2329; display: flex; min-height: 100vh; }
+
+  /* ── 侧边栏 ── */
+  aside { width: 210px; background: #16202e; color: #cfd6e1; display: flex; flex-direction: column; flex-shrink: 0; }
+  .brand { padding: 22px 20px 18px; border-bottom: 1px solid #223044; }
+  .brand b { font-size: 17px; color: #fff; letter-spacing: .5px; }
+  .brand span { display: block; font-size: 11px; color: #6c7c93; margin-top: 3px; }
+  nav { padding: 12px 10px; flex: 1; }
+  nav a { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 8px; color: #9fb0c7; font-size: 13.5px; cursor: pointer; margin-bottom: 4px; }
+  nav a:hover { background: #1d2a3c; color: #fff; }
+  nav a.on { background: #e97b24; color: #fff; font-weight: 500; }
+  nav a .dot { margin-left: auto; background: #2c3a4f; color: #9fb0c7; font-size: 11px; padding: 1px 7px; border-radius: 9px; }
+  nav a.on .dot { background: rgba(255,255,255,.25); color: #fff; }
+  .side-foot { padding: 14px 20px; font-size: 11px; color: #55677f; border-top: 1px solid #223044; }
+
+  /* ── 主区 ── */
+  main { flex: 1; padding: 24px 28px; max-width: 1100px; }
+  h1 { font-size: 21px; margin-bottom: 2px; }
+  .sub { color: #7b8798; font-size: 13px; margin-bottom: 20px; }
+
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 18px; }
+  .stat { background: #fff; border-radius: 14px; padding: 16px 20px; box-shadow: 0 1px 2px rgba(16,24,40,.06); }
+  .stat .num { font-size: 26px; font-weight: 600; }
+  .stat .lbl { font-size: 12px; color: #7b8798; margin-top: 2px; }
+  .stat.accent .num { color: #e97b24; }
+  .stat.danger .num { color: #d64545; }
+
+  .card { background: #fff; border-radius: 14px; padding: 20px 22px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(16,24,40,.06); }
+  .card h2 { font-size: 14px; font-weight: 500; color: #344054; margin-bottom: 14px; }
+  .page { display: none; }
+  .page.on { display: block; }
+
+  /* 表单 */
+  .form { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label { font-size: 12px; color: #667085; }
+  .field input, .field select { padding: 9px 12px; border: 1px solid #d5dae2; border-radius: 9px; font-size: 14px; width: 150px; background: #fff; transition: border .15s; }
+  .field input:focus, .field select:focus { outline: none; border-color: #e97b24; box-shadow: 0 0 0 3px rgba(233,123,36,.12); }
+  .field input.wide { width: 210px; }
+  .btn { padding: 9px 18px; border: none; border-radius: 9px; font-size: 13.5px; cursor: pointer; font-weight: 500; }
+  .btn.primary { background: #e97b24; color: #fff; }
+  .btn.primary:hover { background: #d56e1d; }
+  .btn.ghost { background: #fff; border: 1px solid #d5dae2; color: #344054; }
+  .btn.ghost:hover { background: #f4f6f8; }
+  .btn.mini { padding: 4px 10px; font-size: 12px; background: #f2f4f7; color: #667085; border-radius: 7px; border: none; cursor: pointer; }
+  .btn.mini:hover { background: #e6e9ee; }
+  .btn.danger-mini { background: #fdf0f0; color: #d64545; }
+
+  /* 表格 */
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th { text-align: left; color: #8a94a6; font-weight: 500; font-size: 12px; padding: 10px 12px; border-bottom: 1px solid #eceff3; white-space: nowrap; }
+  td { padding: 11px 12px; border-bottom: 1px solid #f4f6f8; }
+  tbody tr:hover td { background: #fafbfc; }
+  td.num { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .pill { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 500; }
+  .pill.ok { background: #e8f5e3; color: #3e7b12; }
+  .pill.warn { background: #fff4e0; color: #b26a00; }
+  .pill.bad { background: #fdeaea; color: #d64545; }
+  .pill.in { background: #e8f5e3; color: #3e7b12; }
+  .pill.out { background: #fdeaea; color: #d64545; }
+  tr.low td { background: #fdf6f6; }
+  .empty { text-align: center; color: #98a2b3; font-size: 13px; padding: 34px 0; }
+
+  .toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+  .toolbar input, .toolbar select { padding: 9px 12px; border: 1px solid #d5dae2; border-radius: 9px; font-size: 13.5px; }
+  .toolbar input { width: 240px; }
+  .spacer { flex: 1; }
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #1f2329; color: #fff; padding: 11px 22px; border-radius: 10px; font-size: 13.5px; opacity: 0; transition: opacity .25s; pointer-events: none; z-index: 9; }
+  .toast.show { opacity: .95; }
+  .toast.err { background: #b42318; }
+</style>
+</head>
+<body>
+<aside>
+  <div class="brand"><b>仓库管家</b><span>电商库存系统 v2 · SQLite</span></div>
+  <nav>
+    <a data-page="stock" class="on">库存总览 <span class="dot" id="nStock">0</span></a>
+    <a data-page="in">入库</a>
+    <a data-page="out">出库</a>
+    <a data-page="goods">商品档案 <span class="dot" id="nGoods">0</span></a>
+    <a data-page="flow">流水记录</a>
+    <a data-page="data">数据</a>
+  </nav>
+  <div class="side-foot">数据存于本机 warehouse.db<br>请定期在「数据」页备份</div>
+</aside>
+
+<main>
+  <h1 id="pageTitle">库存总览</h1>
+  <div class="sub" id="pageSub">全部 SKU 的实时库存与补货预警</div>
+
+  <div class="stats">
+    <div class="stat accent"><div class="num" id="stSku">0</div><div class="lbl">SKU 数</div></div>
+    <div class="stat"><div class="num" id="stQty">0</div><div class="lbl">总库存（件）</div></div>
+    <div class="stat danger"><div class="num" id="stLow">0</div><div class="lbl">低库存预警</div></div>
+    <div class="stat"><div class="num" id="stToday">0</div><div class="lbl">今日单据</div></div>
+  </div>
+
+  <div id="page-stock" class="page on">
+    <div class="card">
+      <div class="toolbar">
+        <input id="q" placeholder="搜索 SKU / 品名 / 库位…">
+        <div class="spacer"></div>
+        <a class="btn ghost" href="/api/export/stock.csv" download>导出库存 CSV</a>
+      </div>
+      <table><thead><tr><th>SKU</th><th>品名</th><th>库位</th><th>当前库存</th><th>安全库存</th><th>状态</th></tr></thead>
+      <tbody id="stockBody"></tbody></table>
+      <div class="empty" id="stockEmpty">还没有商品 —— 去「商品档案」添加第一个 SKU</div>
+    </div>
+  </div>
+
+  <div id="page-in" class="page">
+    <div class="card">
+      <h2>新建入库单</h2>
+      <div class="form">
+        <div class="field"><label>SKU</label><select id="inSku" class="wide"></select></div>
+        <div class="field"><label>当前库存</label><input id="inNow" disabled style="width:90px;background:#f4f6f8"></div>
+        <div class="field"><label>入库数量</label><input id="inQty" type="number" min="1" value="1" style="width:100px"></div>
+        <div class="field"><label>备注（货柜 / 快递单号）</label><input id="inNote" class="wide" type="text"></div>
+        <button class="btn primary" onclick="addRecord('in')">确认入库</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="page-out" class="page">
+    <div class="card">
+      <h2>新建出库单</h2>
+      <div class="form">
+        <div class="field"><label>SKU</label><select id="outSku" class="wide"></select></div>
+        <div class="field"><label>当前库存</label><input id="outNow" disabled style="width:90px;background:#f4f6f8"></div>
+        <div class="field"><label>出库数量</label><input id="outQty" type="number" min="1" value="1" style="width:100px"></div>
+        <div class="field"><label>备注（订单号 / 渠道）</label><input id="outNote" class="wide" type="text"></div>
+        <button class="btn primary" onclick="addRecord('out')">确认出库</button>
+      </div>
+      <div class="sub" style="margin-top:12px">出库数量超过当前库存时会被后端拦截，防止错单。</div>
+    </div>
+  </div>
+
+  <div id="page-goods" class="page">
+    <div class="card">
+      <h2>添加商品</h2>
+      <div class="form" style="margin-bottom:16px">
+        <div class="field"><label>SKU（唯一）</label><input id="gSku" type="text" class="wide"></div>
+        <div class="field"><label>品名</label><input id="gName" type="text" class="wide"></div>
+        <div class="field"><label>库位</label><input id="gLoc" type="text" style="width:110px"></div>
+        <div class="field"><label>单位</label><input id="gUnit" type="text" value="件" style="width:70px"></div>
+        <div class="field"><label>安全库存</label><input id="gSafe" type="number" min="0" value="10" style="width:90px"></div>
+        <button class="btn primary" onclick="addGoods()">添加</button>
+      </div>
+      <table><thead><tr><th>SKU</th><th>品名</th><th>库位</th><th>单位</th><th>安全库存</th><th>当前库存</th><th>操作</th></tr></thead>
+      <tbody id="goodsBody"></tbody></table>
+      <div class="empty" id="goodsEmpty">还没有商品</div>
+    </div>
+  </div>
+
+  <div id="page-flow" class="page">
+    <div class="card">
+      <div class="toolbar">
+        <select id="flowFilter"><option value="">全部记录</option></select>
+        <div class="spacer"></div>
+        <a class="btn ghost" href="/api/export/flow.csv" download>导出流水 CSV</a>
+      </div>
+      <table><thead><tr><th>时间</th><th>类型</th><th>SKU</th><th>品名</th><th>数量</th><th>备注</th><th>操作</th></tr></thead>
+      <tbody id="flowBody"></tbody></table>
+      <div class="empty" id="flowEmpty">暂无记录</div>
+    </div>
+  </div>
+
+  <div id="page-data" class="page">
+    <div class="card">
+      <h2>备份与恢复</h2>
+      <div class="toolbar">
+        <a class="btn primary" href="/api/backup" download="仓库管家备份.json">导出备份（JSON）</a>
+        <label class="btn ghost" style="cursor:pointer;display:inline-block">导入备份<input type="file" id="importFile" accept=".json" style="display:none"></label>
+        <button class="btn ghost" onclick="clearAll()" style="color:#d64545;border-color:#f2c4c4">清空全部数据</button>
+      </div>
+      <div class="sub" style="margin-top:12px">
+        数据库文件：<b>warehouse.db</b>（就在程序文件夹里）。备份 JSON 包含商品档案和全部流水，换电脑导入即可无缝接管。
+      </div>
+    </div>
+  </div>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+var $ = function(id) { return document.getElementById(id); };
+var goods = [];
+
+function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function toast(msg, err) {
+  var t = $('toast');
+  t.textContent = msg; t.className = 'toast show' + (err ? ' err' : '');
+  clearTimeout(t._h); t._h = setTimeout(function() { t.className = 'toast'; }, 2600);
+}
+async function api(url, opt) {
+  var r = await fetch(url, opt);
+  var d = await r.json().catch(function() { return {}; });
+  if (!r.ok) throw new Error(d.error || ('请求失败 ' + r.status));
+  return d;
+}
+
+/* 导航 */
+var titles = { stock: ['库存总览','全部 SKU 的实时库存与补货预警'], in: ['入库','到货登记，库存自动增加'],
+  out: ['出库','发货登记，库存自动扣减'], goods: ['商品档案','维护 SKU 基础信息与安全库存'],
+  flow: ['流水记录','每一笔进出都有据可查'], data: ['数据','备份、恢复与导出'] };
+document.querySelectorAll('nav a').forEach(function(a) {
+  a.onclick = function() {
+    document.querySelectorAll('nav a').forEach(function(x) { x.classList.remove('on'); });
+    a.classList.add('on');
+    document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('on'); });
+    $('page-' + a.dataset.page).classList.add('on');
+    $('pageTitle').textContent = titles[a.dataset.page][0];
+    $('pageSub').textContent = titles[a.dataset.page][1];
+    if (a.dataset.page === 'flow') loadFlow();
+  };
+});
+
+$('q').oninput = renderStock;
+$('flowFilter').onchange = loadFlow;
+['inSku','outSku'].forEach(function(id) {
+  $(id).onchange = function() {
+    var g = goods.find(function(x) { return x.sku === $(id).value; });
+    $(id.replace('Sku','Now')).value = g ? g.stock : '';
+  };
+});
+
+async function loadStats() {
+  var s = await api('/api/stats');
+  $('stSku').textContent = s.sku_count; $('stQty').textContent = s.total_qty;
+  $('stLow').textContent = s.low; $('stToday').textContent = s.today;
+  $('nStock').textContent = s.sku_count; $('nGoods').textContent = s.sku_count;
+}
+
+async function loadGoods() {
+  goods = await api('/api/goods');
+  ['inSku','outSku','flowFilter'].forEach(function(id) {
+    var keep = $(id).value;
+    $(id).innerHTML = (id === 'flowFilter' ? '<option value="">全部记录</option>' : '') +
+      goods.map(function(g) { return '<option value="' + esc(g.sku) + '">' + esc(g.sku) + ' · ' + esc(g.name) + '</option>'; }).join('');
+    $(id).value = keep;
+  });
+  renderStock(); renderGoods();
+}
+
+function renderStock() {
+  var kw = $('q').value.trim().toLowerCase();
+  var list = goods.filter(function(g) {
+    return !kw || (g.sku + ' ' + g.name + ' ' + g.loc).toLowerCase().indexOf(kw) >= 0;
+  });
+  var tb = $('stockBody'); tb.innerHTML = '';
+  list.forEach(function(g) {
+    var low = g.stock <= g.safe;
+    var tr = document.createElement('tr');
+    if (low) tr.className = 'low';
+    tr.innerHTML = '<td><b>' + esc(g.sku) + '</b></td><td>' + esc(g.name) + '</td><td>' + esc(g.loc || '—') +
+      '</td><td class="num">' + g.stock + ' ' + esc(g.unit) + '</td><td>' + g.safe +
+      '</td><td><span class="pill ' + (low ? 'bad">⚠ 需补货' : 'ok">正常') + '</span></td>';
+    tb.appendChild(tr);
+  });
+  $('stockEmpty').style.display = list.length ? 'none' : 'block';
+}
+
+function renderGoods() {
+  var tb = $('goodsBody'); tb.innerHTML = '';
+  goods.forEach(function(g) {
+    var tr = document.createElement('tr');
+    tr.innerHTML = '<td><b>' + esc(g.sku) + '</b></td><td>' + esc(g.name) + '</td><td>' + esc(g.loc || '—') +
+      '</td><td>' + esc(g.unit) + '</td><td>' + g.safe + '</td><td class="num">' + g.stock +
+      '</td><td><button class="btn mini danger-mini" onclick="delGoods(\'' + esc(g.sku) + '\')">删除</button></td>';
+    tb.appendChild(tr);
+  });
+  $('goodsEmpty').style.display = goods.length ? 'none' : 'block';
+}
+
+async function loadFlow() {
+  var f = $('flowFilter').value;
+  var rows = await api('/api/records' + (f ? '?sku=' + encodeURIComponent(f) : ''));
+  var tb = $('flowBody'); tb.innerHTML = '';
+  rows.forEach(function(r) {
+    var d = new Date(r.ts * 1000);
+    var tr = document.createElement('tr');
+    tr.innerHTML = '<td style="color:#667085">' + d.toLocaleString('zh-CN', {hour12: false}) + '</td>' +
+      '<td><span class="pill ' + r.type + '">' + (r.type === 'in' ? '入库' : '出库') + '</span></td>' +
+      '<td><b>' + esc(r.sku) + '</b></td><td>' + esc(r.name || '(已删)') + '</td>' +
+      '<td class="num">' + r.qty + '</td><td>' + esc(r.note || '') +
+      '</td><td><button class="btn mini" onclick="delRecord(' + r.id + ')">撤销</button></td>';
+    tb.appendChild(tr);
+  });
+  $('flowEmpty').style.display = rows.length ? 'none' : 'block';
+}
+
+async function addRecord(type) {
+  try {
+    await api('/api/records', { method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ type: type, sku: $(type+'Sku').value, qty: parseInt($(type+'Qty').value,10), note: $(type+'Note').value.trim() }) });
+    toast(type === 'in' ? '入库成功 ✓' : '出库成功 ✓');
+    $(type+'Qty').value = 1; $(type+'Note').value = '';
+    await refresh();
+  } catch (e) { toast(e.message, true); }
+}
+async function delRecord(id) {
+  if (!confirm('撤销这笔单据？库存会随之回退。')) return;
+  try { await api('/api/records/' + id, { method: 'DELETE' }); toast('已撤销'); await refresh(); }
+  catch (e) { toast(e.message, true); }
+}
+async function addGoods() {
+  try {
+    await api('/api/goods', { method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ sku: $('gSku').value, name: $('gName').value, loc: $('gLoc').value,
+        unit: $('gUnit').value, safe: parseInt($('gSafe').value,10) || 0 }) });
+    toast('商品已添加 ✓');
+    $('gSku').value = ''; $('gName').value = ''; $('gLoc').value = '';
+    await refresh();
+  } catch (e) { toast(e.message, true); }
+}
+async function delGoods(sku) {
+  if (!confirm('删除商品 ' + sku + '？流水保留，库存总览不再显示。')) return;
+  try { await api('/api/goods/' + encodeURIComponent(sku), { method: 'DELETE' }); toast('已删除'); await refresh(); }
+  catch (e) { toast(e.message, true); }
+}
+$('importFile').onchange = function() {
+  var f = this.files[0]; if (!f) return;
+  var reader = new FileReader();
+  reader.onload = async function() {
+    try {
+      await api('/api/backup', { method: 'POST', headers: {'Content-Type':'application/json'}, body: reader.result });
+      toast('导入成功 ✓'); await refresh();
+    } catch (e) { toast('导入失败：' + e.message, true); }
+  };
+  reader.readAsText(f);
+};
+async function clearAll() {
+  if (!confirm('确定清空全部数据？建议先导出备份。') || !confirm('最后确认：真的清空？')) return;
+  await api('/api/backup', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{"goods":[],"records":[]}' });
+  toast('已清空'); await refresh();
+}
+async function refresh() { await loadStats(); await loadGoods(); }
+refresh();
+</script>
+</body>
+</html>

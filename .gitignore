@@ -1,0 +1,4 @@
+warehouse.db
+warehouse.db-wal
+warehouse.db-shm
+__pycache__/
