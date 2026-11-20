@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Temu 核价计算器</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: #f4f5f7; color: #1f2329; padding: 24px; }
+  .wrap { max-width: 520px; margin: 0 auto; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .sub { color: #6b7280; font-size: 13px; margin-bottom: 20px; }
+  .card { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .row:last-child { margin-bottom: 0; }
+  label { font-size: 14px; }
+  label small { color: #9ca3af; font-size: 12px; }
+  input { width: 140px; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; text-align: right; }
+  input:focus { outline: none; border-color: #e97b24; }
+  .result { font-size: 28px; font-weight: 600; color: #e97b24; }
+  .line { display: flex; justify-content: space-between; padding: 8px 0; font-size: 14px; border-top: 1px dashed #e5e7eb; }
+  .line:first-child { border-top: none; }
+  .line .v { font-weight: 500; }
+  .warn { margin-top: 12px; padding: 10px 12px; border-radius: 8px; font-size: 13px; display: none; }
+  .warn.bad { display: block; background: #fcebeb; color: #a32d2d; }
+  .warn.ok { display: block; background: #eaf3de; color: #3b6d11; }
+  .note { font-size: 12px; color: #9ca3af; margin-top: 14px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Temu 核价计算器</h1>
+  <div class="sub">算保本申报价和建议申报价 —— 别按平台推荐价乱报</div>
+
+  <div class="card">
+    <div class="row"><label>进货成本 <small>¥ / 件</small></label><input type="number" id="cost" value="0" step="0.01"></div>
+    <div class="row"><label>头程运费 <small>¥ / 件</small></label><input type="number" id="ship" value="0" step="0.01"></div>
+    <div class="row"><label>包装耗材 <small>¥ / 件</small></label><input type="number" id="pack" value="0" step="0.01"></div>
+    <div class="row"><label>其他成本 <small>¥ / 件</small></label><input type="number" id="other" value="0" step="0.01"></div>
+    <div class="row"><label>美元汇率 <small>¥ → $</small></label><input type="number" id="rate" value="7.2" step="0.01"></div>
+    <div class="row"><label>目标利润率 <small>%</small></label><input type="number" id="profit" value="20" step="1"></div>
+    <div class="row"><label>Temu 佣金率 <small>%（全托管默认填 0）</small></label><input type="number" id="fee" value="0" step="0.1"></div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <label>建议申报价（USD）</label>
+      <div class="result" id="suggest">$0.00</div>
+    </div>
+    <div class="line"><span>单件总成本</span><span class="v" id="total">¥0.00</span></div>
+    <div class="line"><span>保本申报价</span><span class="v" id="breakeven">$0.00</span></div>
+    <div class="line"><span>目标利润</span><span class="v" id="earn">$0.00 / 件</span></div>
+    <div class="warn" id="warn"></div>
+  </div>
+
+  <div class="card">
+    <div class="line"><span>平台推荐价 <small>$（核价单上的）</small></span><input type="number" id="temu" value="0" step="0.01" style="width:100px"></div>
+    <div class="warn" id="judge"></div>
+    <div class="note">
+      计算：申报价 = 总成本 ÷ 汇率 ÷ (1 − 利润率% − 佣金率%)<br>
+      保本价 = 总成本 ÷ 汇率。低于保本价的核价单别接，报了就亏本。
+    </div>
+  </div>
+</div>
+
+<script>
+function num(id) { return parseFloat(document.getElementById(id).value) || 0; }
+function calc() {
+  var total = num('cost') + num('ship') + num('pack') + num('other');
+  var rate = Math.max(num('rate'), 0.01);
+  var margin = num('profit') / 100 + num('fee') / 100;
+  var be = total / rate;
+  var suggest = margin < 0.95 ? be / (1 - margin) : be;
+  document.getElementById('total').textContent = '¥' + total.toFixed(2);
+  document.getElementById('breakeven').textContent = '$' + be.toFixed(2);
+  document.getElementById('suggest').textContent = '$' + suggest.toFixed(2);
+  document.getElementById('earn').textContent = '$' + (suggest - be).toFixed(2) + ' / 件';
+
+  var w = document.getElementById('warn');
+  if (total <= 0) { w.className = 'warn'; }
+  else if (num('profit') <= 0) { w.className = 'warn bad'; w.textContent = '利润率为 0：这个价格只是保本，旺季前核价建议留 10%~20% 余地。'; }
+  else { w.className = 'warn ok'; w.textContent = '口径正常。核价单价格低于建议价时，先谈价，谈不动就压着不接。'; }
+
+  var j = document.getElementById('judge');
+  var temu = num('temu');
+  if (temu > 0 && total > 0) {
+    if (temu < be) { j.className = 'warn bad'; j.textContent = '推荐价 $' + temu.toFixed(2) + ' 低于保本价 $' + be.toFixed(2) + ' —— 亏本，不要接！'; }
+    else if (temu < suggest) { j.className = 'warn bad'; j.textContent = '推荐价 $' + temu.toFixed(2) + ' 有得赚但低于目标利润率，能谈就往 $' + suggest.toFixed(2) + ' 谈。'; }
+    else { j.className = 'warn ok'; j.textContent = '推荐价 $' + temu.toFixed(2) + ' 达到目标利润率，可以接。'; }
+  } else { j.className = 'warn'; }
+}
+document.querySelectorAll('input').forEach(function(el) { el.addEventListener('input', calc); });
+calc();
+</script>
+</body>
+</html>
