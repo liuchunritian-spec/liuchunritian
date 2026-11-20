@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>剪影 · 网页视频剪辑器</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: #f4f5f7; color: #1f2329; padding: 24px; }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .sub { color: #6b7280; font-size: 13px; margin-bottom: 18px; }
+  .card { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  #drop { border: 2px dashed #d1d5db; border-radius: 12px; padding: 40px 20px; text-align: center; color: #6b7280; cursor: pointer; font-size: 14px; }
+  #drop.on { border-color: #e97b24; color: #e97b24; }
+  video { width: 100%; border-radius: 8px; background: #000; max-height: 420px; }
+  .hidden { display: none; }
+  .bar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; align-items: center; }
+  button { padding: 8px 14px; border: none; border-radius: 8px; background: #1f2329; color: #fff; font-size: 13px; cursor: pointer; }
+  button:disabled { background: #c4c7cc; cursor: not-allowed; }
+  button.accent { background: #e97b24; }
+  .time { font-family: monospace; font-size: 14px; }
+  .time b { color: #e97b24; }
+  select, input[type="text"] { padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 13px; }
+  #prog { height: 8px; background: #e5e7eb; border-radius: 4px; margin-top: 14px; overflow: hidden; display: none; }
+  #prog > div { height: 100%; width: 0; background: #e97b24; transition: width .2s; }
+  #log { margin-top: 12px; font-size: 12px; color: #6b7280; font-family: monospace; white-space: pre-wrap; max-height: 120px; overflow-y: auto; }
+  #dl { margin-top: 12px; display: none; }
+  #dl a { color: #e97b24; font-size: 14px; font-weight: 500; }
+  .hint { font-size: 12px; color: #9ca3af; margin-top: 10px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>剪影 · 网页视频剪辑器</h1>
+  <div class="sub">本地视频拖进来，标记起止点，剪出片段 —— 全程在你浏览器里完成，视频不会上传到任何服务器</div>
+
+  <div class="card">
+    <div id="drop">把视频文件拖到这里，或者点击选择文件<br><span style="font-size:12px">支持 mp4 / webm / mov 等常见格式</span></div>
+    <div id="editor" class="hidden">
+      <video id="v" controls></video>
+      <div class="bar">
+        <button id="btnStart">当前时间设为起点</button>
+        <button id="btnEnd">当前时间设为终点</button>
+        <span class="time">片段：<b id="tStart">00:00.0</b> → <b id="tEnd">00:00.0</b>（<span id="tLen">0</span> 秒）</span>
+      </div>
+      <div class="bar">
+        <span style="font-size:13px">剪切模式：</span>
+        <select id="mode">
+          <option value="fast">快速剪（不重编码，秒出，切点可能落在关键帧附近）</option>
+          <option value="exact">精确剪（重新编码，稍慢，精确到帧）</option>
+        </select>
+        <button id="btnCut" class="accent">剪出片段</button>
+        <button id="btnChange" style="background:#6b7280">换一个视频</button>
+      </div>
+      <div class="hint">快速剪适合粗剪长视频；要做产品素材就选精确剪。第一次剪辑需要加载剪辑引擎（约 30MB，只这一次）。</div>
+      <div id="prog"><div></div></div>
+      <div id="log"></div>
+      <div id="dl"></div>
+    </div>
+    <input type="file" id="file" accept="video/*" class="hidden">
+  </div>
+</div>
+
+<script>
+var $ = function(id) { return document.getElementById(id); };
+var drop = $('drop'), fileInput = $('file'), video = $('v');
+var startT = 0, endT = 0, ffmpeg = null, currentFile = null;
+
+function fmt(s) {
+  var m = Math.floor(s / 60), sec = (s % 60).toFixed(1);
+  return (m < 10 ? '0' : '') + m + ':' + (sec < 10 ? '0' : '') + sec;
+}
+function log(msg) { $('log').textContent += msg + '\n'; $('log').scrollTop = 99999; }
+
+function loadVideo(file) {
+  currentFile = file;
+  video.src = URL.createObjectURL(file);
+  video.onloadedmetadata = function() {
+    startT = 0; endT = Math.min(5, video.duration);
+    refresh(); $('editor').classList.remove('hidden'); drop.classList.add('hidden');
+  };
+}
+drop.onclick = function() { fileInput.click(); };
+fileInput.onchange = function() { if (fileInput.files[0]) loadVideo(fileInput.files[0]); };
+drop.ondragover = function(e) { e.preventDefault(); drop.classList.add('on'); };
+drop.ondragleave = function() { drop.classList.remove('on'); };
+drop.ondrop = function(e) {
+  e.preventDefault(); drop.classList.remove('on');
+  if (e.dataTransfer.files[0]) loadVideo(e.dataTransfer.files[0]);
+};
+$('btnChange').onclick = function() { $('editor').classList.add('hidden'); drop.classList.remove('hidden'); video.src = ''; };
+
+function refresh() {
+  $('tStart').textContent = fmt(startT);
+  $('tEnd').textContent = fmt(endT);
+  $('tLen').textContent = Math.max(0, endT - startT).toFixed(1);
+}
+$('btnStart').onclick = function() { startT = video.currentTime; if (endT <= startT) endT = video.duration; refresh(); };
+$('btnEnd').onclick = function() { endT = video.currentTime; if (endT <= startT) startT = 0; refresh(); };
+
+async function ensureFFmpeg() {
+  if (ffmpeg) return ffmpeg;
+  log('首次使用，正在加载剪辑引擎（约 30MB，请稍等）...');
+  var { FFmpeg } = FFmpegWASM;
+  var { toBlobURL } = FFmpegUtil;
+  var base = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+  ffmpeg = new FFmpeg();
+  ffmpeg.on('log', function(e) { if (e.message && e.message.indexOf('frame=') >= 0) log(e.message); });
+  ffmpeg.on('progress', function(e) {
+    var p = Math.min(100, Math.round((e.progress || 0) * 100));
+    $('prog').querySelector('div').style.width = p + '%';
+  });
+  await ffmpeg.load({
+    coreURL: await toBlobURL(base + '/ffmpeg-core.js', 'text/javascript'),
+    wasmURL: await toBlobURL(base + '/ffmpeg-core.wasm', 'application/wasm'),
+  });
+  log('引擎就绪。');
+  return ffmpeg;
+}
+
+$('btnCut').onclick = async function() {
+  if (endT - startT < 0.2) { alert('片段太短了，先把起止点拉开一点'); return; }
+  var btn = $('btnCut');
+  btn.disabled = true; $('prog').style.display = 'block'; $('prog').querySelector('div').style.width = '0%';
+  $('dl').style.display = 'none'; $('log').textContent = '';
+  try {
+    var ff = await ensureFFmpeg();
+    var name = currentFile.name, ext = (name.split('.').pop() || 'mp4').toLowerCase();
+    if (ext.length > 4 || ext === 'mov') ext = 'mp4';
+    var data = await FFmpegUtil.fetchFile(currentFile);
+    await ff.writeFile('in.' + ext, data);
+    var s = startT.toFixed(3), e = endT.toFixed(3);
+    if ($('mode').value === 'fast') {
+      log('快速剪切（不重编码）...');
+      await ff.exec(['-ss', s, '-to', e, '-i', 'in.' + ext, '-c', 'copy', 'out.' + ext]);
+    } else {
+      log('精确剪（重新编码，长视频需要耐心）...');
+      await ff.exec(['-i', 'in.' + ext, '-ss', s, '-to', e,
+        '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
+        '-c:a', 'aac', '-movflags', '+faststart', 'out.mp4']);
+      ext = 'mp4';
+    }
+    var out = await ff.readFile('out.' + ext);
+    var blob = new Blob([out.buffer], { type: 'video/' + (ext === 'webm' ? 'webm' : 'mp4') });
+    var url = URL.createObjectURL(blob);
+    var base = name.replace(/\.[^.]+$/, '');
+    $('dl').innerHTML = '<a href="' + url + '" download="' + base + '_剪影_' + fmt(startT).replace(':','m') + 's.' + ext + '">下载：' + base + '_剪影.' + ext + '（' + (blob.size / 1048576).toFixed(1) + ' MB）</a>';
+    $('dl').style.display = 'block';
+    log('完成！');
+  } catch (err) {
+    log('出错了：' + err.message);
+    alert('剪切失败：' + err.message + '\n（如果是引擎加载失败，检查网络后重试一次）');
+  }
+  btn.disabled = false;
+};
+</script>
+<script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
+<script src="https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/index.js"></script>
+</body>
+</html>
